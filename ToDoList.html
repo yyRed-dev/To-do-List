@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lista de Tarefas</title>
+
+<style>
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  background: #eef2f5;
+  padding: 30px;
+  display: flex;
+  justify-content: center;
+}
+
+.container {
+  max-width: 700px;
+  width: 100%;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 25px;
+  color: #333;
+}
+
+.input-area {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+
+button {
+  border: none;
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#addBtn {
+  color: white;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task {
+  background: #fff9a8;
+  border-radius: 8px;
+  padding: 12px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: grab;
+}
+
+.task:active {
+  cursor: grabbing;
+}
+
+.task.completed {
+  background: #baf2ba;
+  cursor: default;
+}
+
+.task.completed .text {
+  text-decoration: line-through;
+  color: #555;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.text {
+  max-width: 400px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.task.expanded .text {
+  -webkit-line-clamp: unset;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.actions button {
+  padding: 6px 8px;
+  font-size: 13px;
+  border-radius: 5px;
+}
+
+.time {
+  font-size: 12px;
+  color: #555;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Lista de Tarefas</h1>
+
+<div class="input-area">
+  <input 
+    id="taskInput" 
+    maxlength="25"
+    placeholder="Digite uma nova Tarefa" 
+    onfocus="this.placeholder=''" 
+    onblur="if(this.value===''){this.placeholder='Digite uma nova Tarefa'}"
+  >
+  <button id="addBtn" onclick="addTask()">Adicionar</button>
+</div>
+
+<div id="board" class="board"></div>
+
+</div>
+
+<script>
+
+var LIMITE = 25;
+var tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+var draggedIndex = null;
+
+var input = document.getElementById("taskInput");
+
+input.addEventListener("keydown", function(e){
+  if(e.key === "Enter"){
+    if(input.value.trim() !== ""){
+      addTask();
+    }
+  }
+});
+
+function save() {
+  localStorage.setItem("tasks", JSON.stringify(tasks));
+}
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function getTime() {
+  var d = new Date();
+  return d.getHours().toString().padStart(2,"0")+":"+d.getMinutes().toString().padStart(2,"0");
+}
+
+// 🎨 COR DO BOTÃO
+function updateButtonColor(){
+  var btn = document.getElementById("addBtn");
+
+  var r=120,g=200,b=120;
+
+  if(tasks.length > 4){
+    var t = (tasks.length - 4) / 6;
+
+    if(t <= 0.5){
+      r = 120 + (135 * t * 2);
+      g = 200 - (40 * t * 2);
+    }else{
+      r = 255;
+      g = 160 - (60 * ((t - 0.5) * 2));
+    }
+  }
+
+  btn.style.background = `rgb(${r},${g},${b})`;
+}
+
+// 🔥 ORDENAÇÃO: pendentes em cima, concluídas embaixo
+function ordenarTarefas(){
+  tasks.sort(function(a,b){
+    return a.done - b.done;
+  });
+}
+
+function render(){
+
+  ordenarTarefas();
+
+  var board=document.getElementById("board");
+  board.innerHTML="";
+
+  tasks.forEach(function(task,index){
+
+    var div=document.createElement("div");
+    div.className="task";
+
+    if(task.done) div.classList.add("completed");
+    if(task.expanded) div.classList.add("expanded");
+
+    // 🔥 DRAG apenas se NÃO concluída
+    if(!task.done){
+      div.draggable = true;
+
+      div.ondragstart = function(){
+        draggedIndex = index;
+        div.style.opacity="0.5";
+      };
+
+      div.ondragend = function(){
+        div.style.opacity="1";
+        draggedIndex = null;
+      };
+
+      div.ondragover = function(e){
+        e.preventDefault();
+      };
+
+      div.ondrop = function(e){
+        e.preventDefault();
+
+        if(draggedIndex === null || draggedIndex === index) return;
+
+        // 🔒 não permite dropar em tarefa concluída
+        if(task.done) return;
+
+        var item = tasks.splice(draggedIndex,1)[0];
+        tasks.splice(index,0,item);
+
+        render();
+        save();
+      };
+    }
+
+    div.ondblclick=function(){
+      task.expanded = !task.expanded;
+      render(); save();
+    };
+
+    var row=document.createElement("div");
+    row.className="row";
+
+    var left=document.createElement("div");
+    left.className="left";
+
+    var icon=document.createElement("span");
+    icon.innerText="📝";
+
+    var text=document.createElement("div");
+    text.className="text";
+    text.innerText=task.text;
+
+    left.appendChild(icon);
+    left.appendChild(text);
+
+    var actions=document.createElement("div");
+    actions.className="actions";
+
+    var done=document.createElement("button");
+
+    if(!task.done){
+      done.innerText="✔️";
+      done.onclick=function(){
+        task.done=true;
+        task.time=getTime();
+        render(); save();
+      };
+    }else{
+      done.innerText="↩️";
+      done.onclick=function(){
+        task.done=false;
+        task.time=null;
+        render(); save();
+      };
+    }
+
+    var edit=document.createElement("button");
+    edit.innerText="✏️";
+    edit.onclick=function(){
+      var novo=prompt("Edite sua tarefa:",task.text);
+      if(novo && novo.trim()!==""){
+        if(novo.length>LIMITE) return alert("O limite de 25 caracteres foi atingido.");
+        task.text=capitalize(novo.trim());
+        render(); save();
+      }
+    };
+
+    var del=document.createElement("button");
+    del.innerText="🗑️";
+
+    del.onclick=function(){
+      if(task.done){
+        tasks.splice(index,1);
+      }else{
+        if(!confirm("Tem certeza que deseja apagar esta tarefa?")) return;
+        tasks.splice(index,1);
+      }
+      render(); save();
+    };
+
+    actions.appendChild(done);
+    actions.appendChild(edit);
+    actions.appendChild(del);
+
+    row.appendChild(left);
+    row.appendChild(actions);
+
+    var time=document.createElement("div");
+    time.className="time";
+    if(task.done) time.innerText="Concluída às "+task.time;
+
+    div.appendChild(row);
+    div.appendChild(time);
+
+    board.appendChild(div);
+
+  });
+
+  updateButtonColor();
+}
+
+function addTask(){
+
+  var text=input.value.trim();
+
+  if(text==="") return alert("Adicione uma descrição para sua tarefa.");
+  if(text.length>LIMITE) return alert("O limite de 25 caracteres foi atingido.");
+  if(tasks.length>=10) return alert("Você já atingiu o limite de 10 tarefas.");
+
+  tasks.push({text:capitalize(text),done:false,time:null,expanded:false});
+
+  input.value="";
+  render(); save();
+}
+
+render();
+
+</script>
+
+</body>
+</html>
